@@ -1,4 +1,4 @@
-app_name = "pvi"
+app_name = "pvillc"
 app_title = "Petrovision International LLC"
 app_publisher = "4C Solutions"
 app_description = "Customization for PVI"
