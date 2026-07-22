@@ -89,7 +89,7 @@ frappe.ui.form.on('Logistics Tracker', {
 					});
 				}
 				if (!frm.doc.customs_je_created) {
-					frm.add_custom_button(__('Create Customs & Admin Journal Entry'), function() {
+					frm.add_custom_button(__('Create Customs Journal Entry'), function() {
 						call_je_generation('customs', 'Customs & Admin');
 					});
 				}

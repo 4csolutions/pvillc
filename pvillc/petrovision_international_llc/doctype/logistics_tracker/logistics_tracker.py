@@ -11,11 +11,18 @@ from frappe.utils import flt, getdate, today
 class LogisticsTracker(Document):
 	def validate(self):
 		self.calculate_difference()
+		self.validate_percentages()
 
 	def calculate_difference(self):
 		expected = flt(self.expected_freight_charges)
 		actual = flt(self.actual_freight_charges)
 		self.difference = actual - expected
+
+	def validate_percentages(self):
+		if self.po_details:
+			total_percentage = sum(flt(row.allocation_percentage) for row in self.po_details)
+			if abs(total_percentage - 100.0) > 0.01:
+				frappe.throw(_("The total allocation percentage must equal 100%. Currently it is {0}%.").format(total_percentage))
 
 
 @frappe.whitelist()
@@ -92,7 +99,14 @@ def create_journal_entries(logistics_tracker_name, entry_type="all"):
 		})
 
 		invoice_tag = f" - Invoice: {doc.freight_invoice_number}" if doc.freight_invoice_number else ""
-		je1 = create_je_doc(company, company_currency, je1_entries, f"Logistics Freight Invoice allocation - {doc.name}{invoice_tag} - POs: {po_remarks_str}")
+		je1 = create_je_doc(
+			company, 
+			company_currency, 
+			je1_entries, 
+			f"Logistics Freight Invoice allocation - {doc.name}{invoice_tag} - POs: {po_remarks_str}",
+			bill_no=doc.freight_invoice_number,
+			bill_date=doc.freight_invoice_date
+		)
 		created_jes.append(je1.name)
 		doc.db_set("freight_je_created", 1)
 
@@ -137,19 +151,29 @@ def create_journal_entries(logistics_tracker_name, entry_type="all"):
 		})
 
 		invoice_tag = f" - Invoice: {doc.customs_duty_invoice_number}" if doc.customs_duty_invoice_number else ""
-		je2 = create_je_doc(company, company_currency, je2_entries, f"Logistics Customs / Admin Invoice allocation - {doc.name}{invoice_tag} - POs: {po_remarks_str}")
+		je2 = create_je_doc(
+			company, 
+			company_currency, 
+			je2_entries, 
+			f"Logistics Customs / Admin Invoice allocation - {doc.name}{invoice_tag} - POs: {po_remarks_str}",
+			bill_no=doc.customs_duty_invoice_number,
+			bill_date=doc.customs_duty_invoice_date
+		)
 		created_jes.append(je2.name)
 		doc.db_set("customs_je_created", 1)
 
 	return created_jes
 
 
-def create_je_doc(company, company_currency, accounts, remark):
+def create_je_doc(company, company_currency, accounts, remark, bill_no=None, bill_date=None):
 	je = frappe.new_doc("Journal Entry")
 	je.company = company
 	je.posting_date = today()
-	je.user_remark = remark
+	je.custom_remark = 1
+	je.remark = remark
 	je.multi_currency = 0
+	je.bill_no = bill_no
+	je.bill_date = bill_date
 
 	for entry in accounts:
 		row = je.append("accounts", {
@@ -171,4 +195,5 @@ def create_je_doc(company, company_currency, accounts, remark):
 			row.credit = row.credit_in_account_currency
 
 	je.save()
+	return je
 	return je

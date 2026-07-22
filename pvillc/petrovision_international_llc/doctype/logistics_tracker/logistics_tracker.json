@@ -27,12 +27,15 @@
   "section_financials_customs",
   "separate_invoice_for_customs",
   "freight_invoice_number",
+  "freight_invoice_date",
   "actual_freight_charges",
   "difference",
   "freight_je_created",
   "column_break_2",
   "customs_supplier",
+  "customs_supplier_name",
   "customs_duty_invoice_number",
+  "customs_duty_invoice_date",
   "customs_duty",
   "import_vat",
   "bayan_charges",
@@ -159,6 +162,11 @@
    "label": "Freight Invoice Number"
   },
   {
+   "fieldname": "freight_invoice_date",
+   "fieldtype": "Date",
+   "label": "Freight Invoice Date"
+  },
+  {
    "fieldname": "difference",
    "fieldtype": "Currency",
    "label": "Difference",
@@ -185,6 +193,11 @@
    "fieldname": "customs_duty_invoice_number",
    "fieldtype": "Data",
    "label": "Customs Duty Invoice Number"
+  },
+  {
+   "fieldname": "customs_duty_invoice_date",
+   "fieldtype": "Date",
+   "label": "Customs Duty Invoice Date"
   },
   {
    "fieldname": "import_vat",
@@ -227,6 +240,14 @@
    "fieldtype": "Data",
    "in_list_view": 1,
    "label": "Logistics Supplier Name",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "customs_supplier.supplier_name",
+   "fieldname": "customs_supplier_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Customs Supplier Name",
    "read_only": 1
   }
  ],
