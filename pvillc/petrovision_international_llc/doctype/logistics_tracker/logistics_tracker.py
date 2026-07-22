@@ -56,7 +56,7 @@ def create_journal_entries(logistics_tracker_name):
 	supplier_account = frappe.db.get_value("Party Account", {"parent": doc.logistics_supplier, "company": company}, "account") or "Accounts Payable - PVI"
 
 	created_jes = []
-	if doc.separate_invoices_for_customs:
+	if doc.separate_invoice_for_customs:
 		# JE 1: Freight Charges
 		je1_entries = []
 		total_allocated_freight = 0.0

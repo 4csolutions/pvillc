@@ -1,11 +1,12 @@
 {
  "actions": [],
- "autoname": "format:LOG-TRK-.YYYY.-.#####.",
- "creation": "2026-07-21 18:00:00.000000",
+ "autoname": "naming_series:",
+ "creation": "2026-07-21 18:00:00",
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
   "section_logistics_details",
+  "naming_series",
   "logistics_supplier",
   "mode_of_transport",
   "column_break_1",
@@ -14,7 +15,7 @@
   "section_supplier_po_details",
   "po_details",
   "section_financials_customs",
-  "separate_invoices_for_customs",
+  "separate_invoice_for_customs",
   "actual_freight_charges",
   "difference",
   "customs_duty",
@@ -75,7 +76,7 @@
   },
   {
    "default": "0",
-   "fieldname": "separate_invoices_for_customs",
+   "fieldname": "separate_invoice_for_customs",
    "fieldtype": "Check",
    "label": "Separate Invoices for Customs?"
   },
@@ -125,15 +126,21 @@
    "fieldtype": "Check",
    "label": "Journal Entry Created",
    "read_only": 1
+  },
+  {
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Naming Series",
+   "options": "LTRK-.YY.-.####"
   }
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-07-21 19:58:00.000000",
+ "modified": "2026-07-22 09:59:19.532770",
  "modified_by": "Administrator",
  "module": "Petrovision International LLC",
  "name": "Logistics Tracker",
- "naming_rule": "Expression",
+ "naming_rule": "By \"Naming Series\" field",
  "owner": "Administrator",
  "permissions": [
   {
@@ -147,8 +154,33 @@
    "role": "System Manager",
    "share": 1,
    "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Accounts User",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Purchase User",
+   "share": 1,
+   "write": 1
   }
  ],
+ "row_format": "Dynamic",
  "sort_field": "modified",
  "sort_order": "DESC",
  "states": [],
