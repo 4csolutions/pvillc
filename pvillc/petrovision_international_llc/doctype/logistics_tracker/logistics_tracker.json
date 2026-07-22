@@ -8,23 +8,37 @@
   "section_logistics_details",
   "naming_series",
   "logistics_supplier",
+  "logistics_supplier_name",
   "mode_of_transport",
   "column_break_1",
   "waybill_no",
   "expected_freight_charges",
+  "section_shipment_details",
+  "etd_date",
+  "eta_date",
+  "arrival_date",
+  "shipment_status",
+  "column_break_shipment",
+  "port_of_dispatch",
+  "port_of_arrival",
+  "free_time",
   "section_supplier_po_details",
   "po_details",
   "section_financials_customs",
   "separate_invoice_for_customs",
+  "customs_supplier",
   "actual_freight_charges",
+  "freight_invoice_number",
   "difference",
+  "freight_je_created",
   "column_break_2",
   "customs_duty",
+  "customs_duty_invoice_number",
   "import_vat",
   "bayan_charges",
   "admin_charges",
   "admin_charge_input_vat",
-  "journal_entry_created"
+  "customs_je_created"
  ],
  "fields": [
   {
@@ -35,6 +49,7 @@
   {
    "fieldname": "logistics_supplier",
    "fieldtype": "Link",
+   "in_standard_filter": 1,
    "label": "Logistics Supplier",
    "options": "Supplier"
   },
@@ -59,6 +74,53 @@
    "label": "Expected Freight Charges"
   },
   {
+   "fieldname": "section_shipment_details",
+   "fieldtype": "Section Break",
+   "label": "Shipment Details"
+  },
+  {
+   "fieldname": "etd_date",
+   "fieldtype": "Date",
+   "label": "ETD Date"
+  },
+  {
+   "fieldname": "eta_date",
+   "fieldtype": "Date",
+   "label": "ETA Date"
+  },
+  {
+   "fieldname": "arrival_date",
+   "fieldtype": "Date",
+   "label": "Arrival Date"
+  },
+  {
+   "fieldname": "shipment_status",
+   "fieldtype": "Data",
+   "label": "Shipment Status"
+  },
+  {
+   "fieldname": "column_break_shipment",
+   "fieldtype": "Column Break"
+  },
+  {
+   "depends_on": "eval:doc.mode_of_transport == 'Sea'",
+   "fieldname": "port_of_dispatch",
+   "fieldtype": "Data",
+   "label": "Port of Dispatch"
+  },
+  {
+   "depends_on": "eval:doc.mode_of_transport == 'Sea'",
+   "fieldname": "port_of_arrival",
+   "fieldtype": "Data",
+   "label": "Port of Arrival"
+  },
+  {
+   "depends_on": "eval:doc.mode_of_transport == 'Sea'",
+   "fieldname": "free_time",
+   "fieldtype": "Data",
+   "label": "Free Time"
+  },
+  {
    "fieldname": "section_supplier_po_details",
    "fieldtype": "Section Break",
    "label": "Supplier / Purchase Orders"
@@ -81,9 +143,20 @@
    "label": "Separate Invoices for Customs?"
   },
   {
+   "fieldname": "customs_supplier",
+   "fieldtype": "Link",
+   "label": "Customs Supplier",
+   "options": "Supplier"
+  },
+  {
    "fieldname": "actual_freight_charges",
    "fieldtype": "Currency",
    "label": "Actual Freight Charges"
+  },
+  {
+   "fieldname": "freight_invoice_number",
+   "fieldtype": "Data",
+   "label": "Freight Invoice Number"
   },
   {
    "fieldname": "difference",
@@ -92,13 +165,26 @@
    "read_only": 1
   },
   {
+   "default": "0",
+   "fieldname": "freight_je_created",
+   "fieldtype": "Check",
+   "label": "Freight JE Created",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_2",
+   "fieldtype": "Column Break"
+  },
+  {
    "fieldname": "customs_duty",
    "fieldtype": "Currency",
    "label": "Customs Duty"
   },
   {
-   "fieldname": "column_break_2",
-   "fieldtype": "Column Break"
+   "fieldname": "customs_duty_invoice_number",
+   "fieldtype": "Data",
+   "label": "Customs Duty Invoice Number"
   },
   {
    "fieldname": "import_vat",
@@ -122,9 +208,10 @@
   },
   {
    "default": "0",
-   "fieldname": "journal_entry_created",
+   "fieldname": "customs_je_created",
    "fieldtype": "Check",
-   "label": "Journal Entry Created",
+   "label": "Customs JE Created",
+   "no_copy": 1,
    "read_only": 1
   },
   {
@@ -133,11 +220,19 @@
    "hidden": 1,
    "label": "Naming Series",
    "options": "LTRK-.YY.-.####"
+  },
+  {
+   "fetch_from": "logistics_supplier.supplier_name",
+   "fieldname": "logistics_supplier_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Logistics Supplier Name",
+   "read_only": 1
   }
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-07-22 10:02:12.523454",
+ "modified": "2026-07-22 20:30:00",
  "modified_by": "Administrator",
  "module": "Petrovision International LLC",
  "name": "Logistics Tracker",
@@ -167,21 +262,8 @@
    "role": "Accounts User",
    "share": 1,
    "write": 1
-  },
-  {
-   "create": 1,
-   "delete": 1,
-   "email": 1,
-   "export": 1,
-   "print": 1,
-   "read": 1,
-   "report": 1,
-   "role": "Purchase User",
-   "share": 1,
-   "write": 1
   }
  ],
- "row_format": "Dynamic",
  "sort_field": "modified",
  "sort_order": "DESC",
  "states": [],
