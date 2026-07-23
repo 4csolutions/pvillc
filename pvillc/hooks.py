@@ -256,3 +256,13 @@ app_license = "mit"
 # List of apps whose translatable strings should be excluded from this app's translations.
 # ignore_translatable_strings_from = []
 
+doc_events = {
+	"Payment Entry": {
+		"on_submit": "pvillc.petrovision_international_llc.doctype.proforma_invoice.proforma_invoice.update_proforma_invoice_status",
+		"on_cancel": "pvillc.petrovision_international_llc.doctype.proforma_invoice.proforma_invoice.update_proforma_invoice_status"
+	}
+}
+
+after_migrate = "pvillc.petrovision_international_llc.doctype.proforma_invoice.proforma_invoice.create_custom_fields"
+
+
