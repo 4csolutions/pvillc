@@ -260,6 +260,9 @@ doc_events = {
 	"Payment Entry": {
 		"on_submit": "pvillc.petrovision_international_llc.doctype.proforma_invoice.proforma_invoice.update_proforma_invoice_status",
 		"on_cancel": "pvillc.petrovision_international_llc.doctype.proforma_invoice.proforma_invoice.update_proforma_invoice_status"
+	},
+	"Journal Entry": {
+		"before_save": "pvillc.petrovision_international_llc.journal_entry.validate_journal_entry"
 	}
 }
 
