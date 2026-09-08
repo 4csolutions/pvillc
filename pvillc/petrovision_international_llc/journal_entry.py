@@ -21,5 +21,32 @@ def validate_journal_entry(doc, method=None):
 					row.project = default_project
 
 
+def on_submit_journal_entry(doc, method=None):
+	update_logistics_tracker_status(doc, is_submitted=True)
+
+
+def on_cancel_journal_entry(doc, method=None):
+	update_logistics_tracker_status(doc, is_submitted=False)
+
+
+def update_logistics_tracker_status(doc, is_submitted=True):
+	tracker_name = getattr(doc, "custom_logistics_tracker", None)
+	if not tracker_name:
+		return
+
+	if not frappe.db.exists("Logistics Tracker", tracker_name):
+		return
+
+	tracker = frappe.get_doc("Logistics Tracker", tracker_name)
+	status_value = 1 if is_submitted else 0
+
+	if tracker.freight_journal_entry == doc.name:
+		tracker.db_set("freight_je_created", status_value)
+
+	if tracker.customs_journal_entry == doc.name:
+		tracker.db_set("customs_je_created", status_value)
+
+
+
 
 

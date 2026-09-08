@@ -3,6 +3,7 @@
 
 frappe.ui.form.on('Logistics Tracker', {
 	setup: function(frm) {
+		// Inward PO query filters
 		frm.set_query('purchase_order', 'po_details', function(doc, cdt, cdn) {
 			let row = locals[cdt][cdn];
 			return {
@@ -21,6 +22,26 @@ frappe.ui.form.on('Logistics Tracker', {
 				}
 			};
 		});
+
+		// Outward Delivery Note query filters
+		frm.set_query('delivery_note', 'dn_details', function(doc, cdt, cdn) {
+			let row = locals[cdt][cdn];
+			return {
+				filters: {
+					'customer': row.customer || ''
+				}
+			};
+		});
+
+		frm.set_query('cost_center', 'dn_details', function(doc, cdt, cdn) {
+			let row = locals[cdt][cdn];
+			return {
+				query: "project_controls.project_controls.doctype.project_boq.project_boq.get_cc_children_query",
+				filters: {
+					"project": row.project || ''
+				}
+			};
+		});
 	},
 
 	logistics_supplier: function(frm) {
@@ -31,22 +52,26 @@ frappe.ui.form.on('Logistics Tracker', {
 
 	refresh: function(frm) {
 		if (frm.doc.docstatus === 0 && !frm.is_new()) {
-			// Helper to verify cost center and allocation percentages
+			// Helper to verify cost center and allocation percentages on the active table
 			let validate_rows = function() {
-				if (!frm.doc.po_details || frm.doc.po_details.length === 0) {
-					frappe.msgprint(__('Please add at least one Purchase Order in PO Details table.'));
+				let is_outward = (frm.doc.movement_type === 'Outward');
+				let rows = is_outward ? (frm.doc.dn_details || []) : (frm.doc.po_details || []);
+				let table_name = is_outward ? __('Delivery Note Details') : __('PO Details');
+
+				if (rows.length === 0) {
+					frappe.msgprint(__('Please add at least one row in the {0} table.', [table_name]));
 					return false;
 				}
 				let missing_cost_center = false;
 				let total_percentage = 0.0;
-				frm.doc.po_details.forEach(row => {
+				rows.forEach(row => {
 					if (!row.cost_center) {
 						missing_cost_center = true;
 					}
 					total_percentage += flt(row.allocation_percentage);
 				});
 				if (missing_cost_center) {
-					frappe.msgprint(__('Please select a Cost Center for all rows in the PO Details table.'));
+					frappe.msgprint(__('Please select a Cost Center for all rows in the {0} table.', [table_name]));
 					return false;
 				}
 				if (Math.abs(total_percentage - 100.0) > 0.01) {
@@ -58,6 +83,23 @@ frappe.ui.form.on('Logistics Tracker', {
 
 			let call_je_generation = function(entry_type, label) {
 				if (!validate_rows()) return;
+
+				let total_freight = flt(frm.doc.actual_freight_charges);
+				let total_customs = flt(frm.doc.customs_duty) + flt(frm.doc.import_vat) + flt(frm.doc.bayan_charges) + flt(frm.doc.admin_charges) + flt(frm.doc.admin_charge_input_vat);
+
+				if (entry_type === 'freight' && total_freight <= 0) {
+					frappe.msgprint(__('Actual Freight Charges must be greater than zero to create Freight Journal Entry.'));
+					return;
+				}
+				if (entry_type === 'customs' && total_customs <= 0) {
+					frappe.msgprint(__('Customs / Admin charges must be greater than zero to create Customs Journal Entry.'));
+					return;
+				}
+				if (entry_type === 'all' && total_freight <= 0 && total_customs <= 0) {
+					frappe.msgprint(__('Please enter Actual Freight Charges and/or Customs charges before creating Journal Entries.'));
+					return;
+				}
+
 				frappe.confirm(
 					__('Are you sure you want to generate the {0} Journal Entry for this Logistics Tracker?', [label]),
 					function() {
@@ -82,21 +124,29 @@ frappe.ui.form.on('Logistics Tracker', {
 				);
 			};
 
-			if (frm.doc.separate_invoice_for_customs) {
+			if (frm.doc.is_customs_applicable) {
+				if (frm.doc.separate_invoice_for_customs) {
+					if (!frm.doc.freight_je_created) {
+						frm.add_custom_button(__('Create Freight Journal Entry'), function() {
+							call_je_generation('freight', 'Freight');
+						});
+					}
+					if (!frm.doc.customs_je_created) {
+						frm.add_custom_button(__('Create Customs Journal Entry'), function() {
+							call_je_generation('customs', 'Customs & Admin');
+						});
+					}
+				} else {
+					if (!frm.doc.freight_je_created && !frm.doc.customs_je_created) {
+						frm.add_custom_button(__('Create Journal Entry (All Expenses)'), function() {
+							call_je_generation('all', 'Combined Expenses');
+						});
+					}
+				}
+			} else {
 				if (!frm.doc.freight_je_created) {
 					frm.add_custom_button(__('Create Freight Journal Entry'), function() {
 						call_je_generation('freight', 'Freight');
-					});
-				}
-				if (!frm.doc.customs_je_created) {
-					frm.add_custom_button(__('Create Customs Journal Entry'), function() {
-						call_je_generation('customs', 'Customs & Admin');
-					});
-				}
-			} else {
-				if (!frm.doc.freight_je_created && !frm.doc.customs_je_created) {
-					frm.add_custom_button(__('Create Journal Entry (All Expenses)'), function() {
-						call_je_generation('all', 'Combined Expenses');
 					});
 				}
 			}
@@ -112,15 +162,16 @@ frappe.ui.form.on('Logistics Tracker', {
 	}
 });
 
+// PO Details events
 frappe.ui.form.on('Logistics Tracker PO', {
 	po_details_add: function(frm, cdt, cdn) {
 		// Evenly distribute allocation percentage when a new row is added
-		distribute_percentage(frm);
+		distribute_percentage(frm, 'po_details');
 	},
 
 	po_details_remove: function(frm, cdt, cdn) {
 		// Re-distribute allocation percentage when a row is removed
-		distribute_percentage(frm);
+		distribute_percentage(frm, 'po_details');
 	},
 
 	supplier: function(frm, cdt, cdn) {
@@ -151,8 +202,48 @@ frappe.ui.form.on('Logistics Tracker PO', {
 	}
 });
 
-function distribute_percentage(frm) {
-	let rows = frm.doc.po_details || [];
+// Delivery Note Details events
+frappe.ui.form.on('Logistics Tracker DN', {
+	dn_details_add: function(frm, cdt, cdn) {
+		// Evenly distribute allocation percentage when a new row is added
+		distribute_percentage(frm, 'dn_details');
+	},
+
+	dn_details_remove: function(frm, cdt, cdn) {
+		// Re-distribute allocation percentage when a row is removed
+		distribute_percentage(frm, 'dn_details');
+	},
+
+	customer: function(frm, cdt, cdn) {
+		frappe.model.set_value(cdt, cdn, 'delivery_note', '');
+		frappe.model.set_value(cdt, cdn, 'project', '');
+		frappe.model.set_value(cdt, cdn, 'cost_center', '');
+		frappe.model.set_value(cdt, cdn, 'dn_value', 0);
+		frappe.model.set_value(cdt, cdn, 'dn_value_in_base_currency', 0);
+	},
+
+	delivery_note: function(frm, cdt, cdn) {
+		let row = locals[cdt][cdn];
+		if (row.delivery_note) {
+			frappe.db.get_value('Delivery Note', row.delivery_note, ['project', 'cost_center', 'grand_total', 'base_grand_total'], (r) => {
+				if (r) {
+					frappe.model.set_value(cdt, cdn, 'project', r.project || '');
+					frappe.model.set_value(cdt, cdn, 'cost_center', r.cost_center || '');
+					frappe.model.set_value(cdt, cdn, 'dn_value', r.grand_total || 0);
+					frappe.model.set_value(cdt, cdn, 'dn_value_in_base_currency', r.base_grand_total || 0);
+				}
+			});
+		} else {
+			frappe.model.set_value(cdt, cdn, 'project', '');
+			frappe.model.set_value(cdt, cdn, 'cost_center', '');
+			frappe.model.set_value(cdt, cdn, 'dn_value', 0);
+			frappe.model.set_value(cdt, cdn, 'dn_value_in_base_currency', 0);
+		}
+	}
+});
+
+function distribute_percentage(frm, table_field) {
+	let rows = frm.doc[table_field] || [];
 	if (rows.length === 0) return;
 	let equal_percentage = flt(100.0 / rows.length, 2);
 	let sum = 0.0;

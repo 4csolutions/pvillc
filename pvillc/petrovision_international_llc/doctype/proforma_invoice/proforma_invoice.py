@@ -93,5 +93,16 @@ def create_custom_fields():
 				"insert_after": "reference_date",
 				"no_copy": 1
 			}
+		],
+		"Journal Entry": [
+			{
+				"fieldname": "custom_logistics_tracker",
+				"label": "Logistics Tracker",
+				"fieldtype": "Link",
+				"options": "Logistics Tracker",
+				"insert_after": "bill_date",
+				"no_copy": 1,
+				"read_only": 1
+			}
 		]
 	})

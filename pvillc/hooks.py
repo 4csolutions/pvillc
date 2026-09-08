@@ -262,7 +262,9 @@ doc_events = {
 		"on_cancel": "pvillc.petrovision_international_llc.doctype.proforma_invoice.proforma_invoice.update_proforma_invoice_status"
 	},
 	"Journal Entry": {
-		"before_save": "pvillc.petrovision_international_llc.journal_entry.validate_journal_entry"
+		"before_save": "pvillc.petrovision_international_llc.journal_entry.validate_journal_entry",
+		"on_submit": "pvillc.petrovision_international_llc.journal_entry.on_submit_journal_entry",
+		"on_cancel": "pvillc.petrovision_international_llc.journal_entry.on_cancel_journal_entry"
 	}
 }
 
