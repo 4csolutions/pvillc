@@ -161,24 +161,41 @@ def create_journal_entries(logistics_tracker_name, entry_type="all"):
 				ratio = flt(row.allocation_percentage) / 100.0
 				
 				allocated_duty = flt(doc.customs_duty) * ratio
-				allocated_vat = flt(doc.import_vat) * ratio
 				allocated_bayan = flt(doc.bayan_charges) * ratio
 				allocated_admin = flt(doc.admin_charges) * ratio
-				allocated_admin_vat = flt(doc.admin_charge_input_vat) * ratio
 
-				row_total = allocated_duty + allocated_vat + allocated_bayan + allocated_admin + allocated_admin_vat
+				row_total = allocated_duty + allocated_bayan + allocated_admin
 				total_allocated_customs += row_total
 
 				if allocated_duty > 0:
 					je2_entries.append({"account": customs_duty_account, "debit_in_account_currency": allocated_duty, "project": row.project, "cost_center": row.cost_center})
-				if allocated_vat > 0:
-					je2_entries.append({"account": import_vat_account, "debit_in_account_currency": allocated_vat, "project": row.project, "cost_center": row.cost_center})
 				if allocated_bayan > 0:
 					je2_entries.append({"account": bayan_charges_account, "debit_in_account_currency": allocated_bayan, "project": row.project, "cost_center": row.cost_center})
 				if allocated_admin > 0:
 					je2_entries.append({"account": admin_charges_account, "debit_in_account_currency": allocated_admin, "project": row.project, "cost_center": row.cost_center})
-				if allocated_admin_vat > 0:
-					je2_entries.append({"account": admin_vat_account, "debit_in_account_currency": allocated_admin_vat, "project": row.project, "cost_center": row.cost_center})
+
+			# VAT entries are recorded as single lines under Company Overhead (without project-wise allocation)
+			total_import_vat = flt(doc.import_vat)
+			if total_import_vat > 0:
+				total_allocated_customs += total_import_vat
+				je2_entries.append({
+					"account": import_vat_account,
+					"debit_in_account_currency": total_import_vat,
+					"project": default_project,
+					"cost_center": default_cc,
+					"user_remark": "Import VAT"
+				})
+
+			total_input_vat = flt(doc.admin_charge_input_vat)
+			if total_input_vat > 0:
+				total_allocated_customs += total_input_vat
+				je2_entries.append({
+					"account": admin_vat_account,
+					"debit_in_account_currency": total_input_vat,
+					"project": default_project,
+					"cost_center": default_cc,
+					"user_remark": "Input VAT"
+				})
 
 			if total_allocated_customs > 0:
 				je2_entries.append({
