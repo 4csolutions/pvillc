@@ -88,59 +88,12 @@ def create_journal_entries(logistics_tracker_name, entry_type="all"):
 
 	created_jes = []
 
-	if entry_type == "freight" or (entry_type == "all" and not doc.separate_invoice_for_customs):
-		if doc.freight_je_created:
-			frappe.throw(_("Freight Journal Entry has already been created and submitted."))
+	# Check if this is an all-in-one combined invoice (freight + customs on the same invoice)
+	is_combined = (entry_type == "all" and doc.is_customs_applicable and not doc.separate_invoice_for_customs)
 
-		if flt(doc.actual_freight_charges) <= 0:
-			if entry_type == "freight":
-				frappe.throw(_("Actual Freight Charges must be greater than zero to create Freight Journal Entry."))
-		else:
-			je1_entries = []
-			total_allocated_freight = 0.0
-
-			for row in rows:
-				ratio = flt(row.allocation_percentage) / 100.0
-				allocated_freight = flt(doc.actual_freight_charges) * ratio
-				total_allocated_freight += allocated_freight
-				item_ref = f"(DN: {row.delivery_note})" if is_outward else f"(PO: {row.purchase_order})"
-
-				if allocated_freight > 0:
-					je1_entries.append({
-						"account": freight_account,
-						"debit_in_account_currency": allocated_freight,
-						"project": row.project,
-						"cost_center": row.cost_center,
-						"user_remark": f"Allocated Freight Charge {item_ref}"
-					})
-
-			if total_allocated_freight > 0:
-				je1_entries.append({
-					"account": logistics_supplier_account,
-					"party_type": "Supplier",
-					"party": doc.logistics_supplier,
-					"credit_in_account_currency": total_allocated_freight,
-					"project": default_project,
-					"cost_center": default_cc,
-					"user_remark": f"Total Freight Charge Payable - Invoice: {doc.freight_invoice_number or ''}"
-				})
-
-				invoice_tag = f" - Invoice: {doc.freight_invoice_number}" if doc.freight_invoice_number else ""
-				je1 = create_je_doc(
-					company, 
-					company_currency, 
-					je1_entries, 
-					f"Logistics Freight Invoice allocation - {doc.name}{invoice_tag} - {doc_type_label}: {doc_remarks_str}",
-					bill_no=doc.freight_invoice_number,
-					bill_date=doc.freight_invoice_date,
-					logistics_tracker_name=doc.name
-				)
-				created_jes.append(je1.name)
-				doc.db_set("freight_journal_entry", je1.name)
-
-	if doc.is_customs_applicable and (entry_type == "customs" or (entry_type == "all" and not doc.separate_invoice_for_customs)):
-		if doc.customs_je_created:
-			frappe.throw(_("Customs & Admin Journal Entry has already been created and submitted."))
+	if is_combined:
+		if doc.freight_je_created or doc.customs_je_created:
+			frappe.throw(_("Journal Entry for this Logistics Tracker has already been created and submitted."))
 
 		total_customs_inputs = (
 			flt(doc.customs_duty)
@@ -149,36 +102,54 @@ def create_journal_entries(logistics_tracker_name, entry_type="all"):
 			+ flt(doc.admin_charges)
 			+ flt(doc.admin_charge_input_vat)
 		)
+		total_freight_input = flt(doc.actual_freight_charges)
 
-		if total_customs_inputs <= 0:
-			if entry_type == "customs":
-				frappe.throw(_("Customs / Admin charges must be greater than zero to create Customs Journal Entry."))
-		else:
-			je2_entries = []
-			total_allocated_customs = 0.0
+		if total_freight_input <= 0 and total_customs_inputs <= 0:
+			frappe.throw(_("Please enter Actual Freight Charges and/or Customs charges before creating Journal Entries."))
 
+		je_entries = []
+		total_payable = 0.0
+
+		# 1. Freight Rows (Project-allocated)
+		if total_freight_input > 0:
 			for row in rows:
 				ratio = flt(row.allocation_percentage) / 100.0
-				
+				allocated_freight = total_freight_input * ratio
+				total_payable += allocated_freight
+				item_ref = f"(DN: {row.delivery_note})" if is_outward else f"(PO: {row.purchase_order})"
+				if allocated_freight > 0:
+					je_entries.append({
+						"account": freight_account,
+						"debit_in_account_currency": allocated_freight,
+						"project": row.project,
+						"cost_center": row.cost_center,
+						"user_remark": f"Allocated Freight Charge {item_ref}"
+					})
+
+		# 2. Customs Duty, Bayan & Admin Charges (Project-allocated)
+		if total_customs_inputs > 0:
+			for row in rows:
+				ratio = flt(row.allocation_percentage) / 100.0
 				allocated_duty = flt(doc.customs_duty) * ratio
 				allocated_bayan = flt(doc.bayan_charges) * ratio
 				allocated_admin = flt(doc.admin_charges) * ratio
 
 				row_total = allocated_duty + allocated_bayan + allocated_admin
-				total_allocated_customs += row_total
+				total_payable += row_total
 
+				item_ref = f"(DN: {row.delivery_note})" if is_outward else f"(PO: {row.purchase_order})"
 				if allocated_duty > 0:
-					je2_entries.append({"account": customs_duty_account, "debit_in_account_currency": allocated_duty, "project": row.project, "cost_center": row.cost_center})
+					je_entries.append({"account": customs_duty_account, "debit_in_account_currency": allocated_duty, "project": row.project, "cost_center": row.cost_center, "user_remark": f"Allocated Customs Duty {item_ref}"})
 				if allocated_bayan > 0:
-					je2_entries.append({"account": bayan_charges_account, "debit_in_account_currency": allocated_bayan, "project": row.project, "cost_center": row.cost_center})
+					je_entries.append({"account": bayan_charges_account, "debit_in_account_currency": allocated_bayan, "project": row.project, "cost_center": row.cost_center, "user_remark": f"Allocated Bayan Charge {item_ref}"})
 				if allocated_admin > 0:
-					je2_entries.append({"account": admin_charges_account, "debit_in_account_currency": allocated_admin, "project": row.project, "cost_center": row.cost_center})
+					je_entries.append({"account": admin_charges_account, "debit_in_account_currency": allocated_admin, "project": row.project, "cost_center": row.cost_center, "user_remark": f"Allocated Admin Charge {item_ref}"})
 
-			# VAT entries are recorded as single lines under Company Overhead (without project-wise allocation)
+			# 3. VAT entries under Company Overhead (single lines)
 			total_import_vat = flt(doc.import_vat)
 			if total_import_vat > 0:
-				total_allocated_customs += total_import_vat
-				je2_entries.append({
+				total_payable += total_import_vat
+				je_entries.append({
 					"account": import_vat_account,
 					"debit_in_account_currency": total_import_vat,
 					"project": default_project,
@@ -188,8 +159,8 @@ def create_journal_entries(logistics_tracker_name, entry_type="all"):
 
 			total_input_vat = flt(doc.admin_charge_input_vat)
 			if total_input_vat > 0:
-				total_allocated_customs += total_input_vat
-				je2_entries.append({
+				total_payable += total_input_vat
+				je_entries.append({
 					"account": admin_vat_account,
 					"debit_in_account_currency": total_input_vat,
 					"project": default_project,
@@ -197,29 +168,169 @@ def create_journal_entries(logistics_tracker_name, entry_type="all"):
 					"user_remark": "Input VAT"
 				})
 
-			if total_allocated_customs > 0:
-				je2_entries.append({
-					"account": customs_supplier_account,
-					"party_type": "Supplier",
-					"party": doc.customs_supplier or doc.logistics_supplier,
-					"credit_in_account_currency": total_allocated_customs,
-					"project": default_project,
-					"cost_center": default_cc,
-					"user_remark": f"Total Customs/Admin Charges Payable - Invoice: {doc.customs_duty_invoice_number or ''}"
-				})
+		# 4. Supplier Credit Row
+		if total_payable > 0:
+			invoice_num = doc.freight_invoice_number or doc.customs_duty_invoice_number or ""
+			invoice_date = doc.freight_invoice_date or doc.customs_duty_invoice_date
+			je_entries.append({
+				"account": logistics_supplier_account,
+				"party_type": "Supplier",
+				"party": doc.logistics_supplier,
+				"credit_in_account_currency": total_payable,
+				"project": default_project,
+				"cost_center": default_cc,
+				"user_remark": f"Total Logistics Charges Payable - Invoice: {invoice_num}"
+			})
 
-				invoice_tag = f" - Invoice: {doc.customs_duty_invoice_number}" if doc.customs_duty_invoice_number else ""
-				je2 = create_je_doc(
-					company, 
-					company_currency, 
-					je2_entries, 
-					f"Logistics Customs / Admin Invoice allocation - {doc.name}{invoice_tag} - {doc_type_label}: {doc_remarks_str}",
-					bill_no=doc.customs_duty_invoice_number,
-					bill_date=doc.customs_duty_invoice_date,
-					logistics_tracker_name=doc.name
-				)
-				created_jes.append(je2.name)
-				doc.db_set("customs_journal_entry", je2.name)
+			invoice_tag = f" - Invoice: {invoice_num}" if invoice_num else ""
+			je = create_je_doc(
+				company,
+				company_currency,
+				je_entries,
+				f"Logistics All-in-One Invoice allocation - {doc.name}{invoice_tag} - {doc_type_label}: {doc_remarks_str}",
+				bill_no=invoice_num,
+				bill_date=invoice_date,
+				logistics_tracker_name=doc.name
+			)
+			created_jes.append(je.name)
+			doc.db_set("freight_journal_entry", je.name)
+			doc.db_set("customs_journal_entry", je.name)
+
+	else:
+		# Separate Invoices workflow (or freight-only)
+		if entry_type in ["freight", "all"]:
+			if doc.freight_je_created:
+				frappe.throw(_("Freight Journal Entry has already been created and submitted."))
+
+			if flt(doc.actual_freight_charges) <= 0:
+				if entry_type == "freight":
+					frappe.throw(_("Actual Freight Charges must be greater than zero to create Freight Journal Entry."))
+			else:
+				je1_entries = []
+				total_allocated_freight = 0.0
+
+				for row in rows:
+					ratio = flt(row.allocation_percentage) / 100.0
+					allocated_freight = flt(doc.actual_freight_charges) * ratio
+					total_allocated_freight += allocated_freight
+					item_ref = f"(DN: {row.delivery_note})" if is_outward else f"(PO: {row.purchase_order})"
+
+					if allocated_freight > 0:
+						je1_entries.append({
+							"account": freight_account,
+							"debit_in_account_currency": allocated_freight,
+							"project": row.project,
+							"cost_center": row.cost_center,
+							"user_remark": f"Allocated Freight Charge {item_ref}"
+						})
+
+				if total_allocated_freight > 0:
+					je1_entries.append({
+						"account": logistics_supplier_account,
+						"party_type": "Supplier",
+						"party": doc.logistics_supplier,
+						"credit_in_account_currency": total_allocated_freight,
+						"project": default_project,
+						"cost_center": default_cc,
+						"user_remark": f"Total Freight Charge Payable - Invoice: {doc.freight_invoice_number or ''}"
+					})
+
+					invoice_tag = f" - Invoice: {doc.freight_invoice_number}" if doc.freight_invoice_number else ""
+					je1 = create_je_doc(
+						company, 
+						company_currency, 
+						je1_entries, 
+						f"Logistics Freight Invoice allocation - {doc.name}{invoice_tag} - {doc_type_label}: {doc_remarks_str}",
+						bill_no=doc.freight_invoice_number,
+						bill_date=doc.freight_invoice_date,
+						logistics_tracker_name=doc.name
+					)
+					created_jes.append(je1.name)
+					doc.db_set("freight_journal_entry", je1.name)
+
+		if doc.is_customs_applicable and entry_type in ["customs", "all"]:
+			if doc.customs_je_created:
+				frappe.throw(_("Customs & Admin Journal Entry has already been created and submitted."))
+
+			total_customs_inputs = (
+				flt(doc.customs_duty)
+				+ flt(doc.import_vat)
+				+ flt(doc.bayan_charges)
+				+ flt(doc.admin_charges)
+				+ flt(doc.admin_charge_input_vat)
+			)
+
+			if total_customs_inputs <= 0:
+				if entry_type == "customs":
+					frappe.throw(_("Customs / Admin charges must be greater than zero to create Customs Journal Entry."))
+			else:
+				je2_entries = []
+				total_allocated_customs = 0.0
+
+				for row in rows:
+					ratio = flt(row.allocation_percentage) / 100.0
+					
+					allocated_duty = flt(doc.customs_duty) * ratio
+					allocated_bayan = flt(doc.bayan_charges) * ratio
+					allocated_admin = flt(doc.admin_charges) * ratio
+
+					row_total = allocated_duty + allocated_bayan + allocated_admin
+					total_allocated_customs += row_total
+
+					item_ref = f"(DN: {row.delivery_note})" if is_outward else f"(PO: {row.purchase_order})"
+					if allocated_duty > 0:
+						je2_entries.append({"account": customs_duty_account, "debit_in_account_currency": allocated_duty, "project": row.project, "cost_center": row.cost_center, "user_remark": f"Allocated Customs Duty {item_ref}"})
+					if allocated_bayan > 0:
+						je2_entries.append({"account": bayan_charges_account, "debit_in_account_currency": allocated_bayan, "project": row.project, "cost_center": row.cost_center, "user_remark": f"Allocated Bayan Charge {item_ref}"})
+					if allocated_admin > 0:
+						je2_entries.append({"account": admin_charges_account, "debit_in_account_currency": allocated_admin, "project": row.project, "cost_center": row.cost_center, "user_remark": f"Allocated Admin Charge {item_ref}"})
+
+				# VAT entries are recorded as single lines under Company Overhead (without project-wise allocation)
+				total_import_vat = flt(doc.import_vat)
+				if total_import_vat > 0:
+					total_allocated_customs += total_import_vat
+					je2_entries.append({
+						"account": import_vat_account,
+						"debit_in_account_currency": total_import_vat,
+						"project": default_project,
+						"cost_center": default_cc,
+						"user_remark": "Import VAT"
+					})
+
+				total_input_vat = flt(doc.admin_charge_input_vat)
+				if total_input_vat > 0:
+					total_allocated_customs += total_input_vat
+					je2_entries.append({
+						"account": admin_vat_account,
+						"debit_in_account_currency": total_input_vat,
+						"project": default_project,
+						"cost_center": default_cc,
+						"user_remark": "Input VAT"
+					})
+
+				if total_allocated_customs > 0:
+					je2_entries.append({
+						"account": customs_supplier_account,
+						"party_type": "Supplier",
+						"party": doc.customs_supplier or doc.logistics_supplier,
+						"credit_in_account_currency": total_allocated_customs,
+						"project": default_project,
+						"cost_center": default_cc,
+						"user_remark": f"Total Customs/Admin Charges Payable - Invoice: {doc.customs_duty_invoice_number or ''}"
+					})
+
+					invoice_tag = f" - Invoice: {doc.customs_duty_invoice_number}" if doc.customs_duty_invoice_number else ""
+					je2 = create_je_doc(
+						company, 
+						company_currency, 
+						je2_entries, 
+						f"Logistics Customs / Admin Invoice allocation - {doc.name}{invoice_tag} - {doc_type_label}: {doc_remarks_str}",
+						bill_no=doc.customs_duty_invoice_number,
+						bill_date=doc.customs_duty_invoice_date,
+						logistics_tracker_name=doc.name
+					)
+					created_jes.append(je2.name)
+					doc.db_set("customs_journal_entry", je2.name)
 
 	if not created_jes:
 		frappe.throw(_("No Journal Entries were created. Please ensure charges (Actual Freight or Customs/Admin) are greater than zero."))
