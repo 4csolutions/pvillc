@@ -27,8 +27,7 @@
    "fieldtype": "Link",
    "in_list_view": 1,
    "label": "Delivery Note",
-   "options": "Delivery Note",
-   "reqd": 1
+   "options": "Delivery Note"
   },
   {
    "fieldname": "project",
@@ -36,7 +35,7 @@
    "in_list_view": 1,
    "label": "Project",
    "options": "Project",
-   "read_only": 1
+   "reqd": 1
   },
   {
    "fieldname": "cost_center",
@@ -50,8 +49,7 @@
    "fieldname": "dn_value",
    "fieldtype": "Currency",
    "in_list_view": 1,
-   "label": "DN Value",
-   "read_only": 1
+   "label": "DN Value"
   },
   {
    "fieldname": "dn_value_in_base_currency",

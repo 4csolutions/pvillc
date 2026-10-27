@@ -27,8 +27,7 @@
    "fieldtype": "Link",
    "in_list_view": 1,
    "label": "Purchase Order",
-   "options": "Purchase Order",
-   "reqd": 1
+   "options": "Purchase Order"
   },
   {
    "fieldname": "project",
@@ -36,7 +35,7 @@
    "in_list_view": 1,
    "label": "Project",
    "options": "Project",
-   "read_only": 1
+   "reqd": 1
   },
   {
    "fieldname": "cost_center",
@@ -50,8 +49,7 @@
    "fieldname": "po_value",
    "fieldtype": "Currency",
    "in_list_view": 1,
-   "label": "PO Value",
-   "read_only": 1
+   "label": "PO Value"
   },
   {
    "fieldname": "po_value_in_base_currency",

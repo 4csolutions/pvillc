@@ -63,13 +63,31 @@ frappe.ui.form.on('Logistics Tracker', {
 					return false;
 				}
 				let missing_cost_center = false;
+				let missing_project = false;
+				let missing_party = false;
 				let total_percentage = 0.0;
 				rows.forEach(row => {
+					if (!row.project) {
+						missing_project = true;
+					}
 					if (!row.cost_center) {
 						missing_cost_center = true;
 					}
+					if (is_outward && !row.customer) {
+						missing_party = true;
+					} else if (!is_outward && !row.supplier) {
+						missing_party = true;
+					}
 					total_percentage += flt(row.allocation_percentage);
 				});
+				if (missing_party) {
+					frappe.msgprint(__('Please ensure Supplier/Customer is selected for all rows in the {0} table.', [table_name]));
+					return false;
+				}
+				if (missing_project) {
+					frappe.msgprint(__('Please select a Project for all rows in the {0} table.', [table_name]));
+					return false;
+				}
 				if (missing_cost_center) {
 					frappe.msgprint(__('Please select a Cost Center for all rows in the {0} table.', [table_name]));
 					return false;
@@ -174,12 +192,13 @@ frappe.ui.form.on('Logistics Tracker PO', {
 		distribute_percentage(frm, 'po_details');
 	},
 
+	form_render: function(frm, cdt, cdn) {
+		let row = locals[cdt][cdn];
+		set_project_read_only(frm, 'po_details', row);
+	},
+
 	supplier: function(frm, cdt, cdn) {
 		frappe.model.set_value(cdt, cdn, 'purchase_order', '');
-		frappe.model.set_value(cdt, cdn, 'project', '');
-		frappe.model.set_value(cdt, cdn, 'cost_center', '');
-		frappe.model.set_value(cdt, cdn, 'po_value', 0);
-		frappe.model.set_value(cdt, cdn, 'po_value_in_base_currency', 0);
 	},
 
 	purchase_order: function(frm, cdt, cdn) {
@@ -191,14 +210,17 @@ frappe.ui.form.on('Logistics Tracker PO', {
 					frappe.model.set_value(cdt, cdn, 'cost_center', r.cost_center || '');
 					frappe.model.set_value(cdt, cdn, 'po_value', r.grand_total || 0);
 					frappe.model.set_value(cdt, cdn, 'po_value_in_base_currency', r.base_grand_total || 0);
+					set_project_read_only(frm, 'po_details', row);
 				}
 			});
 		} else {
-			frappe.model.set_value(cdt, cdn, 'project', '');
-			frappe.model.set_value(cdt, cdn, 'cost_center', '');
-			frappe.model.set_value(cdt, cdn, 'po_value', 0);
-			frappe.model.set_value(cdt, cdn, 'po_value_in_base_currency', 0);
+			set_project_read_only(frm, 'po_details', row);
 		}
+	},
+
+	project: function(frm, cdt, cdn) {
+		let row = locals[cdt][cdn];
+		set_project_read_only(frm, 'po_details', row);
 	}
 });
 
@@ -214,12 +236,13 @@ frappe.ui.form.on('Logistics Tracker DN', {
 		distribute_percentage(frm, 'dn_details');
 	},
 
+	form_render: function(frm, cdt, cdn) {
+		let row = locals[cdt][cdn];
+		set_project_read_only(frm, 'dn_details', row);
+	},
+
 	customer: function(frm, cdt, cdn) {
 		frappe.model.set_value(cdt, cdn, 'delivery_note', '');
-		frappe.model.set_value(cdt, cdn, 'project', '');
-		frappe.model.set_value(cdt, cdn, 'cost_center', '');
-		frappe.model.set_value(cdt, cdn, 'dn_value', 0);
-		frappe.model.set_value(cdt, cdn, 'dn_value_in_base_currency', 0);
 	},
 
 	delivery_note: function(frm, cdt, cdn) {
@@ -231,14 +254,17 @@ frappe.ui.form.on('Logistics Tracker DN', {
 					frappe.model.set_value(cdt, cdn, 'cost_center', r.cost_center || '');
 					frappe.model.set_value(cdt, cdn, 'dn_value', r.grand_total || 0);
 					frappe.model.set_value(cdt, cdn, 'dn_value_in_base_currency', r.base_grand_total || 0);
+					set_project_read_only(frm, 'dn_details', row);
 				}
 			});
 		} else {
-			frappe.model.set_value(cdt, cdn, 'project', '');
-			frappe.model.set_value(cdt, cdn, 'cost_center', '');
-			frappe.model.set_value(cdt, cdn, 'dn_value', 0);
-			frappe.model.set_value(cdt, cdn, 'dn_value_in_base_currency', 0);
+			set_project_read_only(frm, 'dn_details', row);
 		}
+	},
+
+	project: function(frm, cdt, cdn) {
+		let row = locals[cdt][cdn];
+		set_project_read_only(frm, 'dn_details', row);
 	}
 });
 
@@ -262,4 +288,12 @@ function calculate_difference(frm) {
 	let expected = flt(frm.doc.expected_freight_charges);
 	let actual = flt(frm.doc.actual_freight_charges);
 	frm.set_value('difference', actual - expected);
+}
+
+function set_project_read_only(frm, table_field, row) {
+	let is_linked = (table_field === 'po_details') ? Boolean(row && row.purchase_order) : Boolean(row && row.delivery_note);
+	let grid = frm.fields_dict[table_field] && frm.fields_dict[table_field].grid;
+	if (grid) {
+		grid.toggle_enable('project', !is_linked);
+	}
 }

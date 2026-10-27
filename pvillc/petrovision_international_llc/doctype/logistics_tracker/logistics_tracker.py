@@ -12,6 +12,23 @@ class LogisticsTracker(Document):
 	def validate(self):
 		self.calculate_difference()
 		self.validate_percentages()
+		self.validate_mandatory_accounting_fields()
+
+	def validate_mandatory_accounting_fields(self):
+		movement_type = self.movement_type or "Inward"
+		is_outward = (movement_type == "Outward")
+		rows = self.dn_details if is_outward else self.po_details
+		table_label = _("Delivery Note Details") if is_outward else _("PO Details")
+		party_label = _("Customer") if is_outward else _("Supplier")
+
+		for row in (rows or []):
+			party_val = row.customer if is_outward else row.supplier
+			if not party_val:
+				frappe.throw(_("Row {0} in {1}: {2} is required.").format(row.idx, table_label, party_label))
+			if not row.project:
+				frappe.throw(_("Row {0} in {1}: Project is required.").format(row.idx, table_label))
+			if not row.cost_center:
+				frappe.throw(_("Row {0} in {1}: Cost Center is required.").format(row.idx, table_label))
 
 	def calculate_difference(self):
 		expected = flt(self.expected_freight_charges)
@@ -26,6 +43,11 @@ class LogisticsTracker(Document):
 			if abs(total_percentage - 100.0) > 0.01:
 				frappe.throw(_("The total allocation percentage must equal 100%. Currently it is {0}%.").format(total_percentage))
 
+
+def get_row_item_ref(row, is_outward):
+	if is_outward:
+		return f"(DN: {row.delivery_note})" if row.delivery_note else f"(Project: {row.project})"
+	return f"(PO: {row.purchase_order})" if row.purchase_order else f"(Project: {row.project})"
 
 @frappe.whitelist()
 def create_journal_entries(logistics_tracker_name, entry_type="all"):
@@ -46,16 +68,24 @@ def create_journal_entries(logistics_tracker_name, entry_type="all"):
 		frappe.throw(_("The total allocation percentage must equal 100%. Currently it is {0}%.").format(total_percentage))
 
 	for row in rows:
+		party_val = row.customer if is_outward else row.supplier
+		party_label = _("Customer") if is_outward else _("Supplier")
+		if not party_val:
+			frappe.throw(_("Row {0}: {1} is required.").format(row.idx, party_label))
+		if not row.project:
+			frappe.throw(_("Row {0}: Project is required.").format(row.idx))
 		if not row.cost_center:
 			frappe.throw(_("Row {0}: Cost Center is required.").format(row.idx))
 
-	# Build remark list of [Party, Document]
+	# Build remark list of [Party, Document or Project]
 	doc_remarks_list = []
 	for row in rows:
 		if is_outward:
-			doc_remarks_list.append(f"[{row.customer}, {row.delivery_note}]")
+			ref_doc = row.delivery_note or row.project
+			doc_remarks_list.append(f"[{row.customer}, {ref_doc}]")
 		else:
-			doc_remarks_list.append(f"[{row.supplier}, {row.purchase_order}]")
+			ref_doc = row.purchase_order or row.project
+			doc_remarks_list.append(f"[{row.supplier}, {ref_doc}]")
 	doc_remarks_str = ", ".join(doc_remarks_list)
 	doc_type_label = "DNs" if is_outward else "POs"
 
@@ -116,7 +146,7 @@ def create_journal_entries(logistics_tracker_name, entry_type="all"):
 				ratio = flt(row.allocation_percentage) / 100.0
 				allocated_freight = total_freight_input * ratio
 				total_payable += allocated_freight
-				item_ref = f"(DN: {row.delivery_note})" if is_outward else f"(PO: {row.purchase_order})"
+				item_ref = get_row_item_ref(row, is_outward)
 				if allocated_freight > 0:
 					je_entries.append({
 						"account": freight_account,
@@ -137,7 +167,7 @@ def create_journal_entries(logistics_tracker_name, entry_type="all"):
 				row_total = allocated_duty + allocated_bayan + allocated_admin
 				total_payable += row_total
 
-				item_ref = f"(DN: {row.delivery_note})" if is_outward else f"(PO: {row.purchase_order})"
+				item_ref = get_row_item_ref(row, is_outward)
 				if allocated_duty > 0:
 					je_entries.append({"account": customs_duty_account, "debit_in_account_currency": allocated_duty, "project": row.project, "cost_center": row.cost_center, "user_remark": f"Allocated Customs Duty {item_ref}"})
 				if allocated_bayan > 0:
@@ -213,7 +243,7 @@ def create_journal_entries(logistics_tracker_name, entry_type="all"):
 					ratio = flt(row.allocation_percentage) / 100.0
 					allocated_freight = flt(doc.actual_freight_charges) * ratio
 					total_allocated_freight += allocated_freight
-					item_ref = f"(DN: {row.delivery_note})" if is_outward else f"(PO: {row.purchase_order})"
+					item_ref = get_row_item_ref(row, is_outward)
 
 					if allocated_freight > 0:
 						je1_entries.append({
@@ -277,7 +307,7 @@ def create_journal_entries(logistics_tracker_name, entry_type="all"):
 					row_total = allocated_duty + allocated_bayan + allocated_admin
 					total_allocated_customs += row_total
 
-					item_ref = f"(DN: {row.delivery_note})" if is_outward else f"(PO: {row.purchase_order})"
+					item_ref = get_row_item_ref(row, is_outward)
 					if allocated_duty > 0:
 						je2_entries.append({"account": customs_duty_account, "debit_in_account_currency": allocated_duty, "project": row.project, "cost_center": row.cost_center, "user_remark": f"Allocated Customs Duty {item_ref}"})
 					if allocated_bayan > 0:
