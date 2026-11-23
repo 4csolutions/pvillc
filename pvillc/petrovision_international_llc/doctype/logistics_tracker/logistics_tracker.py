@@ -29,6 +29,8 @@ class LogisticsTracker(Document):
 				frappe.throw(_("Row {0} in {1}: Project is required.").format(row.idx, table_label))
 			if not row.cost_center:
 				frappe.throw(_("Row {0} in {1}: Cost Center is required.").format(row.idx, table_label))
+			if row.allocation_percentage is None or row.allocation_percentage == "":
+				frappe.throw(_("Row {0} in {1}: Allocation Percentage is required.").format(row.idx, table_label))
 
 	def calculate_difference(self):
 		expected = flt(self.expected_freight_charges)

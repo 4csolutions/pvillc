@@ -211,11 +211,19 @@ frappe.ui.form.on('Logistics Tracker PO', {
 					frappe.model.set_value(cdt, cdn, 'po_value', r.grand_total || 0);
 					frappe.model.set_value(cdt, cdn, 'po_value_in_base_currency', r.base_grand_total || 0);
 					set_project_read_only(frm, 'po_details', row);
+					distribute_percentage(frm, 'po_details');
 				}
 			});
 		} else {
+			frappe.model.set_value(cdt, cdn, 'po_value', 0);
+			frappe.model.set_value(cdt, cdn, 'po_value_in_base_currency', 0);
 			set_project_read_only(frm, 'po_details', row);
+			distribute_percentage(frm, 'po_details');
 		}
+	},
+
+	po_value: function(frm, cdt, cdn) {
+		distribute_percentage(frm, 'po_details');
 	},
 
 	project: function(frm, cdt, cdn) {
@@ -271,6 +279,29 @@ frappe.ui.form.on('Logistics Tracker DN', {
 function distribute_percentage(frm, table_field) {
 	let rows = frm.doc[table_field] || [];
 	if (rows.length === 0) return;
+
+	if (table_field === 'po_details') {
+		let total_po_value = 0.0;
+		rows.forEach(row => {
+			total_po_value += flt(row.po_value_in_base_currency) || flt(row.po_value);
+		});
+
+		if (total_po_value > 0) {
+			let sum = 0.0;
+			rows.forEach((row, i) => {
+				if (i === rows.length - 1) {
+					frappe.model.set_value(row.doctype, row.name, 'allocation_percentage', flt(100.0 - sum, 2));
+				} else {
+					let row_value = flt(row.po_value_in_base_currency) || flt(row.po_value);
+					let pct = flt((row_value / total_po_value) * 100.0, 2);
+					frappe.model.set_value(row.doctype, row.name, 'allocation_percentage', pct);
+					sum += pct;
+				}
+			});
+			return;
+		}
+	}
+
 	let equal_percentage = flt(100.0 / rows.length, 2);
 	let sum = 0.0;
 	rows.forEach((row, i) => {
